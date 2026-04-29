@@ -1,4 +1,4 @@
-# garch-lnmm
+# Garch-lnmm
 
 Log-normal moment-matching simulation for European call option pricing under the GARCH diffusion model
 
