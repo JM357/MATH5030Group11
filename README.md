@@ -1,4 +1,4 @@
-# Garch-lnmm
+# garch-lnmm
 
 Log-normal moment-matching simulation for European call option pricing under the GARCH diffusion model
 
@@ -121,3 +121,14 @@ MIT
 ## Demo Notebook
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JM357/MATH5030Group11/blob/main/notebooks/demo.ipynb)
+
+## Reference
+> Barone-Adesi, G., Rasmussen, H., & Ravanelli, C. (2003).  
+> *An Option Pricing Formula for the GARCH Diffusion Model*.
+
+Provides the conditional moments and Taylor approximation used as analytical benchmarks in this project.
+
+> Andersen, L. (2008).  
+> *Simple and Efficient Simulation of the Heston Stochastic Volatility Model*.  
+
+Motivates the moment-matching methodology adopted for the variance simulation scheme.
