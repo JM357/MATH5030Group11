@@ -1,7 +1,5 @@
 import numpy as np
 from scipy.stats import norm
-from pyfeng.garch import GarchUncorrBaroneAdesi2004
-from pyfeng.garch import GarchMcTimeDisc
 
 
 class GarchDiffusionMC:
