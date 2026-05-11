@@ -1,15 +1,12 @@
 import numpy as np
 from scipy.stats import norm
+from scipy.linalg import expm
 
 
 class GarchDiffusionMC:
     """
     Monte Carlo simulator for the continuous-time GARCH diffusion model.
-
-    The current implementation focuses on the rho = 0 case, where conditional
-    Monte Carlo pricing can be used for European call options.
     """
-
     def __init__(self, S0, V0, r, kappa, theta, sigma, rho, T):
         self.S0 = S0
         self.V0 = V0
@@ -20,6 +17,7 @@ class GarchDiffusionMC:
         self.rho = rho
         self.T = T
 
+   # --- Basic Utilities ---
     def _price_summary(self, conditional_prices):
         price = float(np.mean(conditional_prices))
         std_dev = float(np.std(conditional_prices, ddof=1))
@@ -47,23 +45,7 @@ class GarchDiffusionMC:
         return Z
 
     def bs_call_from_variance(self, avg_var, K):
-        """
-        Black-Scholes call price using average variance over [0, T].
-
-        Parameters
-        ----------
-        avg_var : float or array-like
-            Average integrated variance.
-        K : float
-            Strike price.
-
-        Returns
-        -------
-        float or np.ndarray
-            Black-Scholes call price conditional on avg_var.
-        """
-        avg_var = np.maximum(avg_var, 1e-14)
-        vol = np.sqrt(avg_var)
+        vol = np.sqrt(np.maximum(avg_var, 1e-14))
         T = self.T
 
         d1 = (
@@ -77,72 +59,157 @@ class GarchDiffusionMC:
             self.S0 * norm.cdf(d1)
             - K * np.exp(-self.r * T) * norm.cdf(d2)
         )
-
-    def simulate_euler_cond_mc(
-        self,
-        N_paths,
-        N_steps,
-        K,
-        seed=None,
-        return_stats=False,
-    ):
-        """
-        Price a European call using truncated Euler conditional Monte Carlo.
-
-        This method assumes rho = 0.
-        """
-        assert self.rho == 0, "Conditional Monte Carlo requires rho = 0."
-
+    
+    # --- In-House Euler conditional Monte Carlo method ---
+    def simulate_euler_cond_mc(self, N_paths, N_steps, K, seed=None, return_stats=False):
         rng = np.random.default_rng(seed)
 
         dt = self.T / N_steps
         sqrt_dt = np.sqrt(dt)
 
-        V = np.full(N_paths, self.V0, dtype=np.float64)
-        int_var = np.zeros(N_paths, dtype=np.float64)
+        V = np.full(N_paths, self.V0)
+        int_var = np.zeros(N_paths)
         Z = np.empty(N_paths, dtype=np.float64)
 
         for _ in range(N_steps):
             V_old = V.copy()
             self._fill_antithetic_normals(rng, Z)
 
-            V_next = (
-                V_old
-                + self.kappa * (self.theta - V_old) * dt
-                + self.sigma * V_old * sqrt_dt * Z
-            )
+            V_next = V_old + self.kappa * (self.theta - V_old) * dt + self.sigma * V_old * sqrt_dt * Z
+            V = np.maximum(V_next, 1e-12)
 
-            V = np.maximum(V_next, 1e-8)
             int_var += 0.5 * (V_old + V) * dt
 
         avg_var = int_var / self.T
-        conditional_prices = self.bs_call_from_variance(avg_var, K)
-        summary = self._price_summary(conditional_prices)
+        summary = self._price_summary(self.bs_call_from_variance(avg_var, K))
 
         if return_stats:
             return summary
 
         return summary["price"]
 
-    def simulate_moment_matching_cond_mc(
-        self,
-        N_paths,
-        N_steps,
-        K,
-        seed=None,
-        return_stats=False,
-    ):
+    
+    # --- Helped functions for the shifted-lognormal moment-matching method ---
+    def _transition_moment_matrix(self, dt):
         """
-        Price a European call using log-normal moment-matching conditional Monte Carlo.
+        Matrix exponential for the first three raw transition moments of V.
 
-        This method assumes rho = 0.
+        For dV = kappa(theta - V)dt + sigma V dW,
+
+        M_n'(h) = n c1 M_{n-1}(h)
+                  + [-n c2 + 0.5 n(n-1)c3^2] M_n(h),
+
+        where c1 = kappa * theta, c2 = kappa, c3 = sigma.
+
+        The state vector is [1, E[V], E[V^2], E[V^3]].
         """
-        assert self.rho == 0, "Conditional Monte Carlo requires rho = 0."
+        c1 = self.kappa * self.theta
+        c2 = self.kappa
+        c3 = self.sigma
 
+        a1 = -c2
+        a2 = -2.0 * c2 + c3**2
+        a3 = -3.0 * c2 + 3.0 * c3**2
+
+        A = np.array(
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [c1, a1, 0.0, 0.0],
+                [0.0, 2.0 * c1, a2, 0.0],
+                [0.0, 0.0, 3.0 * c1, a3],
+            ],
+            dtype=np.float64,
+        )
+
+        return expm(A * dt)
+
+    def _transition_raw_moments_first3(self, V, moment_matrix):
+        """
+        Return raw moments m1, m2, m3 of V_{t+dt} conditional on V_t = V.
+        """
+        V2 = V * V
+        V3 = V2 * V
+
+        m1 = (
+            moment_matrix[1, 0]
+            + moment_matrix[1, 1] * V
+            + moment_matrix[1, 2] * V2
+            + moment_matrix[1, 3] * V3
+        )
+
+        m2 = (
+            moment_matrix[2, 0]
+            + moment_matrix[2, 1] * V
+            + moment_matrix[2, 2] * V2
+            + moment_matrix[2, 3] * V3
+        )
+
+        m3 = (
+            moment_matrix[3, 0]
+            + moment_matrix[3, 1] * V
+            + moment_matrix[3, 2] * V2
+            + moment_matrix[3, 3] * V3
+        )
+
+        return m1, m2, m3
+
+    def _sln_params_from_raw_moments(self, m1, m2, m3):
+        """
+        Convert the first three raw moments into shifted-lognormal parameters.
+
+        The shifted-lognormal update has the form
+
+            Y = mu * [(1 - lam) + lam * exp(sigma_sln * Z - 0.5 * sigma_sln^2)],
+
+        where Z is standard normal. The parameters are chosen to match the
+        conditional mean, variance, and skewness implied by m1, m2, and m3.
+        """
+        mu = np.maximum(m1, 1e-14)
+
+        var = m2 - m1**2
+        var = np.maximum(var, 0.0)
+
+        std = np.sqrt(var)
+        cv = std / mu   # Coefficient of variation
+
+        mu3_central = m3 - 3.0 * m1 * m2 + 2.0 * m1**3
+
+        skew = np.zeros_like(mu)
+        valid_var = var > 1e-20
+
+        skew[valid_var] = (
+            mu3_central[valid_var]
+            / (var[valid_var] ** 1.5)
+        )
+
+        # The SLN formula requires positive skewness.
+        skew_pos = np.maximum(skew, 0.0)
+
+        w = np.zeros_like(mu)
+        valid_skew = skew_pos > 1e-12
+
+        w[valid_skew] = (
+            4.0
+            * np.sinh(
+                (1.0 / 6.0)
+                * np.arccosh(1.0 + 0.5 * skew_pos[valid_skew] ** 2)
+            ) ** 2
+        )
+
+        sigma_sln = np.zeros_like(mu)
+        lam = np.ones_like(mu)
+
+        valid_w = w > 1e-20
+        sigma_sln[valid_w] = np.sqrt(np.log1p(w[valid_w]))
+        lam[valid_w] = cv[valid_w] / np.sqrt(w[valid_w])
+
+        return mu, sigma_sln, lam, var, skew
+
+    # --- LNMM method using first and second moments ---
+    def simulate_moment_matching_cond_mc(self, N_paths, N_steps, K, seed=None, return_stats=False):
         rng = np.random.default_rng(seed)
 
         dt = self.T / N_steps
-
         V = np.full(N_paths, self.V0, dtype=np.float64)
         int_var = np.zeros(N_paths, dtype=np.float64)
         Z = np.empty(N_paths, dtype=np.float64)
@@ -163,16 +230,12 @@ class GarchDiffusionMC:
 
             Var_exact = (
                 theta**2 / (2.0 * c2 / c3**2 - 1.0)
-                + exp_c2
-                * (2.0 * theta * (V_old - theta))
-                / (c2 / c3**2 - 1.0)
-                - exp_2c2 * (V_old - theta) ** 2
-                + exp_c3_2_minus_2c2
-                * (
+                + exp_c2 * (2.0 * theta * (V_old - theta)) / (c2 / c3**2 - 1.0)
+                - exp_2c2 * (V_old - theta)**2
+                + exp_c3_2_minus_2c2 * (
                     V_old**2
                     - (2.0 * V_old * theta) / (1.0 - c3**2 / c2)
-                    + theta**2
-                    / (
+                    + theta**2 / (
                         (1.0 - c3**2 / (2.0 * c2))
                         * (1.0 - c3**2 / c2)
                     )
@@ -187,6 +250,7 @@ class GarchDiffusionMC:
             ln_mean = np.log(M) - 0.5 * ln_var
 
             V = np.exp(ln_mean + ln_vol * Z)
+
             int_var += 0.5 * (V_old + V) * dt
 
         avg_var = int_var / self.T
@@ -198,98 +262,66 @@ class GarchDiffusionMC:
 
         return summary["price"]
 
-    def bs_second_derivative_avg_variance(self, Vbar, K):
+    # --- shifted-lognormal moment-matching method using first three moments ---
+    def simulate_shifted_lognormal_cond_mc(
+        self,
+        N_paths,
+        N_steps,
+        K,
+        seed=None,
+        return_stats=False,
+    ):
         """
-        Second derivative of the Black-Scholes call price with respect to average variance.
+        Price a European call using skewness-matched shifted-lognormal
+        moment-matching conditional Monte Carlo.
+
+        This version follows the direct shifted-lognormal implementation:
+        after matching the first three transition moments, it always samples
+        from the shifted-lognormal update and does not fall back to ordinary
+        two-moment LNMM.
         """
-        Vbar = np.maximum(Vbar, 1e-16)
-        T = self.T
+        assert self.rho == 0, "Conditional Monte Carlo requires rho = 0."
 
-        m = np.log(self.S0 / K) + self.r * T
-        d1 = (m + 0.5 * Vbar * T) / np.sqrt(Vbar * T)
+        rng = np.random.default_rng(seed)
 
-        dC_dV = (
-            self.S0
-            * np.sqrt(T)
-            * np.exp(-0.5 * d1**2)
-            / np.sqrt(8.0 * np.pi * Vbar)
-        )
+        dt = self.T / N_steps
 
-        bracket = (
-            0.5 * m**2 / (Vbar * T) ** 2
-            - 1.0 / (2.0 * Vbar * T)
-            - 1.0 / 8.0
-        )
+        V = np.full(N_paths, self.V0, dtype=np.float64)
+        int_var = np.zeros(N_paths, dtype=np.float64)
+        Z = np.empty(N_paths, dtype=np.float64)
 
-        return dC_dV * bracket * T
+        moment_matrix = self._transition_moment_matrix(dt)
 
-    def garch_M1_M2c_integrated_variance(self):
-        """
-        First and centered second moment of average integrated variance
-        for the GARCH diffusion model.
-        """
-        c1 = self.kappa * self.theta
-        c2 = self.kappa
-        c3 = self.sigma
-        V0 = self.V0
-        T = self.T
+        for _ in range(N_steps):
+            V_old = V.copy()
+            self._fill_antithetic_normals(rng, Z)
 
-        assert 2 * c2 > c3**2, "Need 2 * kappa > sigma^2 for finite second moment."
-
-        exp1 = np.exp(-c2 * T)
-        exp2 = np.exp(-2.0 * c2 * T)
-        exp3 = np.exp((c3**2 - 2.0 * c2) * T)
-
-        M1 = c1 / c2 + (V0 - c1 / c2) * (1.0 - exp1) / (c2 * T)
-
-        term1 = -exp2 * (c2 * V0 - c1) ** 2 / (T**2 * c2**4)
-
-        term2 = (
-            2.0
-            * exp3
-            * (
-                2.0 * c1**2
-                + 2.0 * c1 * (c3**2 - 2.0 * c2) * V0
-                + (2.0 * c2**2 - 3.0 * c2 * c3**2 + c3**4) * V0**2
+            m1, m2, m3 = self._transition_raw_moments_first3(
+                V_old,
+                moment_matrix,
             )
-            / (T**2 * (c2 - c3**2) ** 2 * (2.0 * c2 - c3**2) ** 2)
-        )
 
-        term3 = (
-            -c3**2
-            * (
-                c1**2 * (4.0 * c2 * (3.0 - T * c2) + (2.0 * T * c2 - 5.0) * c3**2)
-                + 2.0 * c1 * c2 * (-2.0 * c2 + c3**2) * V0
-                + c2**2 * (-2.0 * c2 + c3**2) * V0**2
+            mu, sigma_sln, lam, var, skew = self._sln_params_from_raw_moments(
+                m1,
+                m2,
+                m3,
             )
-            / (T**2 * c2**4 * (-2.0 * c2 + c3**2) ** 2)
-        )
 
-        term4 = (
-            2.0
-            * exp1
-            * c3**2
-            * (
-                2.0 * c1**2 * (T * c2**2 - (1.0 + T * c2) * c3**2)
-                + 2.0 * c1 * c2**2 * (1.0 - T * c2 + T * c3**2) * V0
-                + c2**2 * (c3**2 - c2) * V0**2
+            V_next = mu * (
+                (1.0 - lam)
+                + lam * np.exp(sigma_sln * Z - 0.5 * sigma_sln**2)
             )
-            / (T**2 * c2**4 * (c2 - c3**2) ** 2)
-        )
 
-        M2c = term1 + term2 + term3 + term4
+            V = np.maximum(V_next, 1e-12)
+            int_var += 0.5 * (V_old + V) * dt
 
-        return M1, M2c
+        avg_var = int_var / self.T
+        conditional_prices = self.bs_call_from_variance(avg_var, K)
+        summary = self._price_summary(conditional_prices)
 
-    def garch_taylor2_call(self, K):
-        """
-        Taylor-2 analytical approximation for the GARCH diffusion call price.
-        """
-        M1, M2c = self.garch_M1_M2c_integrated_variance()
+        if return_stats:
+            return summary
 
-        bs_base = self.bs_call_from_variance(M1, K)
-        second_deriv = self.bs_second_derivative_avg_variance(M1, K)
+        return summary["price"]
 
-        price = bs_base + 0.5 * M2c * second_deriv
-
-        return float(price)
+    
