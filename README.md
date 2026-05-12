@@ -101,19 +101,7 @@ Returns:
 
 ---
 
-### `garch_taylor2_call(K)`
 
-Computes the Taylor-2 analytical approximation.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `K` | float | Strike price |
-
-Returns:
-
-| Field | Type | Description |
-|---|---|---|
-| price | float | Taylor-2 approximated option price |
 
 ## License
 MIT
