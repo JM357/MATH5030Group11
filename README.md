@@ -101,6 +101,29 @@ Returns:
 
 ---
 
+### `simulate_shifted_lognormal_cond_mc(N_paths, N_steps, K, seed=None, return_stats=False)`
+
+Prices a European call using the Shifted Log-Normal Moment-Matching scheme.
+
+This method computes the first three exact conditional raw moments of the next-step variance transition \(V(t+h)\), converts them into conditional mean, variance, and skewness, and then samples from a shifted-lognormal approximation matching these moments.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `N_paths` | int | Number of Monte Carlo paths |
+| `N_steps` | int | Number of time steps |
+| `K` | float | Strike price |
+| `seed` | int or None | Random seed |
+| `return_stats` | bool | If True, return price and error statistics |
+
+Returns:
+
+| Field | Type | Description |
+|---|---|---|
+| `price` | float | Estimated option price |
+| `std_dev` | float | Sample standard deviation |
+| `std_error` | float | Monte Carlo standard error |
+
+---
 
 
 ## License
