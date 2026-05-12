@@ -134,6 +134,11 @@ MIT
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JM357/MATH5030Group11/blob/main/notebooks/demo.ipynb)
 
 ## Reference
+> Choi, J., Hu, L., & Kwok, Y. K. (2024).  
+> *Efficient and Accurate Simulation of the Stochastic-Alpha-Beta-Rho Model*.
+
+Motivates the shifted-lognormal moment-matching framework used in the SLN-MM extension.
+
 > Barone-Adesi, G., Rasmussen, H., & Ravanelli, C. (2003).  
 > *An Option Pricing Formula for the GARCH Diffusion Model*.
 
