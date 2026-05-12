@@ -29,8 +29,8 @@ model = GarchDiffusionMC(
 )
 
 price = model.simulate_moment_matching_cond_mc(
-    N_paths=1000000,
-    N_steps=24,
+    N_paths=50000,
+    N_steps=32,
     K=130,
     seed=42,
 )
