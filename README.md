@@ -6,7 +6,9 @@ Log-normal moment-matching simulation for European call option pricing under the
 
 The continuous-time GARCH diffusion model is useful for stochastic volatility option pricing, but standard Euler discretization can generate negative variance values. In practice, truncation is often applied, which may introduce discretization bias under coarse time steps.
 
-This package implements and compares a positivity-preserving Log-Normal Moment-Matching (LN-MM) scheme against Euler-conditional Monte Carlo and a Taylor-2 closed-form analytical approximation.
+This package implements and compares positivity-preserving moment-matching schemes, including Log-Normal Moment-Matching (LN-MM) and Shifted Log-Normal Moment-Matching (SLN-MM), against Euler conditional Monte Carlo and the Taylor closed-form analytical approximation from Barone-Adesi et al. (2003).
+
+The conditional mean, variance, and skewness used in these schemes are computed from the **exact** conditional moments of the next-step GARCH diffusion variance transition.
 
 ## Installation
 
