@@ -17,7 +17,7 @@ class GarchDiffusionMC:
         self.rho = rho
         self.T = T
 
-   # --- Basic Utilities ---
+    # --- Basic Utilities ---
     def _price_summary(self, conditional_prices):
         price = float(np.mean(conditional_prices))
         std_dev = float(np.std(conditional_prices, ddof=1))
@@ -89,7 +89,7 @@ class GarchDiffusionMC:
         return summary["price"]
 
     
-    # --- Helped functions for the shifted-lognormal moment-matching method ---
+    # --- Helper functions for the shifted-lognormal moment-matching method ---
     def _transition_moment_matrix(self, dt):
         """
         Matrix exponential for the first three raw transition moments of V.
