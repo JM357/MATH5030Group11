@@ -21,7 +21,7 @@ from garch_lnmm import GarchDiffusionMC
 
 model = GarchDiffusionMC(
     S0=100,
-    V0=0.09,
+    V0=0.16,
     r=0.05,
     kappa=0.75,
     theta=0.04,
@@ -30,14 +30,22 @@ model = GarchDiffusionMC(
     T=5,
 )
 
-price = model.simulate_moment_matching_cond_mc(
+lnmm_price = model.simulate_moment_matching_cond_mc(
     N_paths=50000,
     N_steps=32,
     K=130,
     seed=42,
 )
 
-print(price)
+slnmm_price = model.simulate_shifted_lognormal_cond_mc(
+    N_paths=50000,
+    N_steps=32,
+    K=130,
+    seed=42,
+)
+
+print("LN-MM price:", lnmm_price)
+print("SLN-MM price:", slnmm_price)
 ```
 
 ## API Reference
