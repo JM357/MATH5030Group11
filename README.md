@@ -1,6 +1,6 @@
 # garch-lnmm
 
-Log-normal moment-matching simulation for European call option pricing under the GARCH diffusion model
+Log-normal and Shifted-lognormal moment-matching simulation for European call option pricing under the GARCH diffusion model
 
 ## Problem
 
@@ -143,7 +143,7 @@ MIT
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JM357/MATH5030Group11/blob/main/notebooks/demo.ipynb)
 
-## Reference
+## References
 > Choi, J., Hu, L., & Kwok, Y. K. (2024).  
 > *Efficient and Accurate Simulation of the Stochastic-Alpha-Beta-Rho Model*.
 
